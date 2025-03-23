@@ -6,26 +6,24 @@ API_ENDPOINT = os.environ.get('API_ENDPOINT', 'http://localhost:5000/api/tasks')
 
 SAMPLE_TASK = {
     "metadata": {
-        "name": "BNA Atlas处理任务",
-        "description": "处理被试sub-001的BNA图谱分析",
-        "tags": ["fMRI", "BNA", "preprocessing"]
+        "name": "简单测试任务",
+        "description": "运行一个简单的测试命令",
+        "tags": ["test", "simple"]
     },
     "data": {
-        "input": {
-            "subject_id": "sub-001",
-            "atlas": "BNA_v3"
-        },
+        "input": {},
         "output": {
-            "path": "/data/output/sub-001",
-            "formats": ["NIFTI", "CSV"]
+            "path": "/data/output",
+            "formats": ["txt"]
         }
     },
     "execution": {
-        "containerImage": "nipreps/fmriprep:24.0.0",
+        "containerImage": "alpine:latest",
         "resources": {
-            "cpu": 4,
-            "memory": "16Gi"
-        }
+            "cpu": 1,
+            "memory": "512Mi"
+        },
+        "command": ["echo", "Hello, World!"]
     }
 }
 
