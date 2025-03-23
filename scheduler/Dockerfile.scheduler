@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY ./scheduler/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
@@ -14,7 +14,7 @@ set -e\n\
 if [ -f .env ]; then\n\
     export $(grep -v "^\s*#\|^\s*$" .env | xargs)\n\
 fi\n\
-exec gunicorn --bind 0.0.0.0:${SCHEDULER_PORT:-5001} --workers 4 "scheduler:app"' > entrypoint.sh \
+exec gunicorn --bind 0.0.0.0:${SCHEDULER_PORT:-5001} --workers 4 "scheduler.scheduler:app"' > entrypoint.sh \
     && chmod +x entrypoint.sh
 
 # 保持与k8s配置默认值一致
