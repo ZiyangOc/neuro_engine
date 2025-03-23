@@ -35,7 +35,7 @@ services:
       context: .
       dockerfile: scheduler/Dockerfile.scheduler
     environment:
-      MONGO_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongo:27017
+      MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017
       DEPLOY_MODE: docker
     depends_on:
       - mongo
@@ -44,3 +44,7 @@ volumes:
   mongo_data:
 
 secrets:
+  mongo_root_password:
+    file: ./secrets/mongo_root_password
+  mongo_app_password:
+    file: ./secrets/mongo_app_password
