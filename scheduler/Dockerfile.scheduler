@@ -1,0 +1,23 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+COPY .env .env
+
+# 创建可靠的入口点脚本
+RUN echo '#!/bin/sh\n\
+set -e\n\
+if [ -f .env ]; then\n\
+    export $(grep -v "^\s*#\|^\s*$" .env | xargs)\n\
+fi\n\
+exec gunicorn --bind 0.0.0.0:${SCHEDULER_PORT:-5001} --workers 4 "scheduler:app"' > entrypoint.sh \
+    && chmod +x entrypoint.sh
+
+# 保持与k8s配置默认值一致
+EXPOSE ${SCHEDULER_PORT:-5050}  
+
+ENTRYPOINT ["./entrypoint.sh"]
