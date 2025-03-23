@@ -2,12 +2,12 @@ version: '3.8'
 
 services:
   mongo:
-    image: mongo:6.0
+    image: mongo:6.0.12
     container_name: mongo
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
+      - ./mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
