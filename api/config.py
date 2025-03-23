@@ -8,13 +8,13 @@ class Config:
     """统一配置管理类"""
     def __init__(self):
         deploy_mode = os.getenv('DEPLOY_MODE', 'k8s')
-        if deploy_mode == 'docker':
-            self.mongo_uri = os.getenv("MONGO_URI")
-        else:
-            # 从Kubernetes Secret获取数据库凭据
-            mongo_user = os.getenv('MONGO_USERNAME')
-            mongo_pass = os.getenv('MONGO_PASSWORD')
-            self.mongo_uri = f"mongodb://{mongo_user}:{mongo_pass}@mongodb:27017/admin?authSource=admin&replicaSet=rs0"
+        # 统一从Secret文件读取凭证
+        with open('/run/secrets/mongo_root_password') as f:
+            root_pass = f.read().strip()
+        with open('/run/secrets/mongo_app_password') as f:
+            app_pass = f.read().strip()
+            
+        self.mongo_uri = f"mongodb://app_user:{app_pass}@mongodb:27017/neuro?authSource=admin&replicaSet=rs0"
         self.api_port = int(os.getenv('API_PORT', 5000))
         self.debug = os.getenv('DEBUG', 'false').lower() == 'true'
         
