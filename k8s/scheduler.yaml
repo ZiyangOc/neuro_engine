@@ -20,7 +20,10 @@ spec:
         - name: SCHEDULER_PORT
           value: "5050"  # 使用与API服务不同的端口范围
         - name: MONGO_URI
-          value: "mongodb://mongodb:27017/"
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: connection-string
         ports:
         - containerPort: 5050
 ---

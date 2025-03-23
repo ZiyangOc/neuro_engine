@@ -7,7 +7,10 @@ logger = logging.getLogger(__name__)
 class Config:
     """统一配置管理类"""
     def __init__(self):
-        self.mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+        # 从Kubernetes Secret获取数据库凭据
+        mongo_user = os.getenv('MONGO_USERNAME')
+        mongo_pass = os.getenv('MONGO_PASSWORD')
+        self.mongo_uri = f"mongodb://{mongo_user}:{mongo_pass}@mongodb:27017/admin?authSource=admin&replicaSet=rs0"
         self.api_port = int(os.getenv('API_PORT', 5000))
         self.debug = os.getenv('DEBUG', 'false').lower() == 'true'
         

@@ -10,31 +10,72 @@ spec:
       storage: 5Gi
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: mongodb
 spec:
+  serviceName: mongodb
+  replicas: 3
   selector:
     matchLabels:
       app: mongodb
-  replicas: 1
   template:
     metadata:
       labels:
         app: mongodb
     spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
       containers:
       - name: mongodb
         image: mongo:5.0
+        args: ["--auth", "--replSet", "rs0"]
         ports:
         - containerPort: 27017
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: username
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: password
         volumeMounts:
         - name: mongodb-data
           mountPath: /data/db
+        readinessProbe:
+          exec:
+            command:
+            - mongo
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi" 
+            cpu: "1"
       volumes:
       - name: mongodb-data
         persistentVolumeClaim:
           claimName: mongodb-pvc
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "ssd-sc"
+      resources:
+        requests:
+          storage: 10Gi
+      volumeMode: Filesystem
 ---
 apiVersion: v1
 kind: Service
