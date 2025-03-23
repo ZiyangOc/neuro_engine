@@ -1,10 +1,10 @@
-// Read password from Docker secret
-const rootPass = process.env.MONGO_INITDB_ROOT_PASSWORD;
-const appPass = 'mongopass';
-
-db = db.getSiblingDB('neuro');
+// Initialize application database and user
+db = db.getSiblingDB('neuro_engine');
 db.createUser({
-  user: "admin",
-  pwd: passwordPrompt(), // Will use the secret from docker-compose
-  roles: ["readWrite"]
+  user: "app_user",
+  pwd: "mongopass", // 密码应与docker-compose中api服务的MONGO_URI配置一致
+  roles: [{
+    role: "readWrite",
+    db: "neuro_engine"
+  }]
 });
