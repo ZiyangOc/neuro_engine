@@ -18,8 +18,8 @@ services:
 
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -30,8 +30,8 @@ services:
 
   scheduler:
     build:
-      context: ./scheduler 
-      dockerfile: Dockerfile.scheduler
+      context: .
+      dockerfile: scheduler/Dockerfile.scheduler
     environment:
       MONGO_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongo:27017
       DEPLOY_MODE: docker
