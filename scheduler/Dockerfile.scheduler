@@ -5,7 +5,7 @@ WORKDIR /app
 COPY ./scheduler/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY ./scheduler /app
 COPY .env .env
 
 # 创建可靠的入口点脚本
