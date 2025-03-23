@@ -22,44 +22,36 @@ A distributed task processing system with API service and scheduler components.
 - Minimum 4GB RAM, 2 CPU cores
 - Internet connection
 
-## Deployment
+## Deployment Options
 
-### Quick Start
+### 1. Kubernetes Deployment (Minikube)
 ```bash
-curl -O https://raw.githubusercontent.com/your-repo/neuro-engine/main/deploy.sh
-chmod +x deploy.sh
-sudo ./deploy.sh
+# 启动minikube集群
+./deploy.sh k8s
+
+# 访问服务
+minikube service list
 ```
 
-### Manual Deployment
-1. Install dependencies:
+### 2. Docker Compose Deployment
 ```bash
-sudo apt-get update && sudo apt-get install -y docker.io curl
+# 启动所有服务
+./deploy.sh docker
+
+# 查看日志
+docker-compose logs -f
 ```
 
-2. Install Kubernetes (k3s):
+### 公共环境变量配置
 ```bash
-curl -sfL https://get.k3s.io | sh -
-sudo kubectl config use-context default
-```
+# 复制示例配置文件
+cp .env.example .env
 
-3. Clone repository:
-```bash
-git clone https://github.com/your-repo/neuro-engine.git
-cd neuro-engine
-```
-
-4. Build Docker images:
-```bash
-docker build -t neuro-engine-api:1.0 -f api/Dockerfile .
-docker build -t neuro-engine-scheduler:1.0 -f scheduler/Dockerfile.scheduler .
-```
-
-5. Deploy to Kubernetes:
-```bash
-kubectl apply -f k8s/mongodb.yaml
-kubectl apply -f k8s/api-service.yaml  
-kubectl apply -f k8s/scheduler.yaml
+# 根据需要修改以下配置：
+# MONGO_ROOT_USER=admin
+# MONGO_ROOT_PASSWORD=your-root-password
+# MONGO_USER=appuser
+# MONGO_PASSWORD=your-app-password
 ```
 
 ## Verification

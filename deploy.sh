@@ -1,6 +1,23 @@
 #!/bin/bash
 set -e
 
+DEPLOY_MODE=${1:-k8s}
+
+case $DEPLOY_MODE in
+  docker)
+    echo "Starting Docker deployment..."
+    docker-compose up --build -d
+    exit 0
+    ;;
+  k8s)
+    echo "Starting Kubernetes deployment..."
+    ;;
+  *)
+    echo "Usage: $0 [docker|k8s]"
+    exit 1
+    ;;
+esac
+
 # Check and install system dependencies
 echo "Checking system dependencies..."
 declare -a deps=("docker" "curl" "git")

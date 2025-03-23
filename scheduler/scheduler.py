@@ -16,7 +16,14 @@ class TaskScheduler:
     def __init__(self):
         from dotenv import load_dotenv
         load_dotenv()
-        self.mongo_uri = os.getenv('MONGO_URI', 'mongodb://host.docker.internal:27017/')
+        deploy_mode = os.getenv('DEPLOY_MODE', 'k8s')
+        if deploy_mode == 'docker':
+            self.mongo_uri = os.getenv('MONGO_URI')
+        else:
+            # Kubernetes模式从Secret获取凭据
+            mongo_user = os.getenv('MONGO_USERNAME')
+            mongo_pass = os.getenv('MONGO_PASSWORD') 
+            self.mongo_uri = f"mongodb://{mongo_user}:{mongo_pass}@mongodb:27017/admin?authSource=admin&replicaSet=rs0"
         self.db = self.connect_mongo()
         self.batch_api = client.BatchV1Api()
         self.core_api = client.CoreV1Api()
