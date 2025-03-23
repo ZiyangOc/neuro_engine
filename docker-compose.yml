@@ -11,16 +11,10 @@ services:
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     environment:
       MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
-      MONGO_USER: ${MONGO_USER}
+      MONGO_USER: ${MONGO_USER:-admin}
     secrets:
       - mongo_root_password
       - mongo_app_password
-
-secrets:
-  mongo_root_password:
-    file: ./secrets/mongo_root_password
-  mongo_app_password:
-    file: ./secrets/mongo_app_password
 
   api:
     build:
@@ -45,4 +39,10 @@ secrets:
       - mongo
 
 volumes:
-  mongo-data:
+  mongo_data:
+
+secrets:
+  mongo_root_password:
+    file: ./secrets/mongo_root_password
+  mongo_app_password:
+    file: ./secrets/mongo_app_password
