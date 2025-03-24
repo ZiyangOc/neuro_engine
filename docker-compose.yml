@@ -7,16 +7,20 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./mongo_data:/data/db
+      - mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: mongoroot
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_password
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
       MONGO_INITDB_DATABASE: admin
-      MONGO_INITDB_ENABLE_AUTH: "true"
     secrets:
       - mongo_root_password
       - mongo_app_password
+    healthcheck:
+      test: mongo --eval 'db.runCommand("ping").ok' --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
@@ -25,8 +29,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      MONGO_URI: mongodb://appuser:mongopass@mongo:27017
+      MONGO_URI: mongodb://appuser:${MONGO_APP_USER}@mongo:27017/taskdb?authSource=admin&retryWrites=true&w=majority&connectTimeoutMS=5000
+      MONGO_APP_PASSWORD_FILE: /run/secrets/mongo_app_password
       DEPLOY_MODE: docker
+    secrets:
+      - mongo_app_password
     depends_on:
       - mongo
 
@@ -34,17 +41,14 @@ services:
     build:
       context: .
       dockerfile: scheduler/Dockerfile.scheduler
+    ports:
+      - "5050:5050"
     environment:
-      MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017
-      DEPLOY_MODE: docker
+      SCHEDULER_PORT: 5050
+      MONGO_URI: mongodb://appuser:${MONGO_APP_USER}@mongo:27017/taskdb?authSource=admin&retryWrites=true&w=majority
+      MONGO_APP_PASSWORD_FILE: /run/secrets/mongo_app_password
+    secrets:
+      - mongo_app_password
     depends_on:
-      - mongo
-
-volumes:
-  mongo_data:
-
-secrets:
-  mongo_root_password:
-    file: ./secrets/mongo_root_password
-  mongo_app_password:
-    file: ./secrets/mongo_app_password
+      mongo:
+        condition: service_healthy
