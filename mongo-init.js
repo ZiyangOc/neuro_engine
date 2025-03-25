@@ -1,18 +1,20 @@
-// 从Docker secrets读取密码
-var rootPass = cat('/run/secrets/mongo_root_password');
-var appPass = cat('/run/secrets/mongo_app_password');
+// mongo-init.js
 
-// 创建应用数据库和用户
-db = db.getSiblingDB('taskdb');
-db.createUser({
+// 创建应用用户（认证数据库为 admin）
+db.getSiblingDB("admin").createUser({
   user: "appuser",
-  pwd: appPass,
-  roles: [{
-    role: "readWrite",
-    db: "taskdb"
-  }]
+  pwd: "appuser123",
+  roles: [ 
+    { role: "readWrite", db: "taskdb" }  // 授权 taskdb 的读写权限
+  ]
 });
 
-// 创建任务集合索引
-db.tasks.createIndex({ created_at: 1 });
-db.tasks.createIndex({ status: 1 });
+// --------------- 关键修正：切换到 taskdb 创建索引 ---------------
+const taskdb = db.getSiblingDB("taskdb");
+
+// 创建集合（可选，MongoDB 会在首次插入数据时自动创建集合）
+taskdb.createCollection("tasks");
+
+// 创建索引
+taskdb.tasks.createIndex({ created_at: 1 });
+taskdb.tasks.createIndex({ status: 1 });

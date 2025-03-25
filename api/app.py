@@ -6,7 +6,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-mongo_uri = os.environ.get('MONGO_URI', 'mongodb://mongodb:27017/')
+mongo_uri = f"mongodb://appuser:appuser123@mongo:27017/taskdb?authSource=admin"
 client = MongoClient(mongo_uri)
 db = client['taskdb']
 tasks = db['tasks']
@@ -41,9 +41,3 @@ def get_task(task_id):
         return jsonify(task)
     return jsonify({"error": "Task not found"}), 404
 
-from dotenv import load_dotenv
-
-if __name__ == '__main__':
-    load_dotenv()
-    port = int(os.getenv('API_PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=os.getenv('DEBUG', 'false').lower() == 'true')

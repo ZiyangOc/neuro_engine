@@ -1,26 +1,10 @@
 FROM python:3.10-slim
 
 WORKDIR /app
-
-COPY ./scheduler/requirements.txt .
+# 安装schedule服务依赖
+COPY schedule/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./scheduler /app
+COPY schedule/ .
 
-# 创建安全的入口点脚本
-RUN echo '#!/bin/sh\n\
-set -e\n\
-# 验证必要环境变量\n\
-for var in MONGO_URI SCHEDULER_PORT; do\n\
-    if [ -z \"\${$var}\" ]; then\n\
-        echo \"ERROR: Environment variable $var is not set\" >&2\n\
-        exit 1\n\
-    fi\n\
-done\n\
-exec gunicorn --bind 0.0.0.0:${SCHEDULER_PORT} --workers 4 --timeout 120 "scheduler.scheduler:app"' > entrypoint.sh \
-    && chmod +x entrypoint.sh
-
-# 保持与k8s配置默认值一致
-EXPOSE ${SCHEDULER_PORT:-5050}  
-
-ENTRYPOINT ["./entrypoint.sh"]
+CMD ["python", "-u", "scheduler.py"]

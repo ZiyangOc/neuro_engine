@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mongo:
     image: mongo:6.0.12
@@ -7,33 +5,26 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
+      - ./mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     environment:
-      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_password
-      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
       MONGO_INITDB_DATABASE: admin
-    secrets:
-      - mongo_root_password
-      - mongo_app_password
     healthcheck:
-      test: mongo --eval 'db.runCommand("ping").ok' --quiet
-      interval: 5s
+      test: ["CMD", "mongosh", "--host", "mongo", "--eval", "db.adminCommand('ping')", "--username", "admin", "--password", "admin123", "--authenticationDatabase", "admin", "--quiet"]
+      interval: 600s
       timeout: 5s
       retries: 5
-
   api:
     build:
       context: .
       dockerfile: api/Dockerfile
     ports:
-      - "8000:8000"
+      - "5000:5000"
     environment:
-      MONGO_URI: mongodb://appuser:${MONGO_APP_USER}@mongo:27017/taskdb?authSource=admin&retryWrites=true&w=majority&connectTimeoutMS=5000
-      MONGO_APP_PASSWORD_FILE: /run/secrets/mongo_app_password
+      MONGO_URI: mongodb://appuser:appuser123@mongo:27017/taskdb?authSource=admin&retryWrites=true&w=majority&connectTimeoutMS=5000
       DEPLOY_MODE: docker
-    secrets:
-      - mongo_app_password
     depends_on:
       - mongo
 
@@ -41,14 +32,14 @@ services:
     build:
       context: .
       dockerfile: scheduler/Dockerfile.scheduler
-    ports:
-      - "5050:5050"
     environment:
-      SCHEDULER_PORT: 5050
-      MONGO_URI: mongodb://appuser:${MONGO_APP_USER}@mongo:27017/taskdb?authSource=admin&retryWrites=true&w=majority
-      MONGO_APP_PASSWORD_FILE: /run/secrets/mongo_app_password
-    secrets:
-      - mongo_app_password
+      MONGO_URI: mongodb://appuser:appuser123@mongo:27017/taskdb?authSource=admin&retryWrites=true&w=majority
+      KUBECONFIG: /root/.kube/config
+    volumes:
+      - ~/.kube:/root/.kube
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       mongo:
         condition: service_healthy
+

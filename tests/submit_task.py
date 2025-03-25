@@ -50,5 +50,5 @@ def list_all_tasks():
         print(f"获取任务列表失败: {str(e)}")
 
 if __name__ == "__main__":
-    submit_sample_task()
+    # submit_sample_task()
     list_all_tasks()

@@ -13,7 +13,7 @@ COPY ./api /app
 # 创建入口点脚本
 RUN echo '#!/bin/sh\n\
 set -e\n\
-exec gunicorn --bind 0.0.0.0:${API_PORT:-5000} --workers 4 "app:create_app()"' > entrypoint.sh \
+exec gunicorn --bind 0.0.0.0:${API_PORT:-5000} --workers 4 "app:app"' > entrypoint.sh \
     && chmod +x entrypoint.sh
 
 EXPOSE ${API_PORT:-5000}
