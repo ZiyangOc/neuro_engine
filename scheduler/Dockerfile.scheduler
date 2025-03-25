@@ -2,9 +2,9 @@ FROM python:3.10-slim
 
 WORKDIR /app
 # 安装schedule服务依赖
-COPY schedule/requirements.txt .
+COPY ./scheduler/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY schedule/ .
+COPY ./scheduler/ .
 
 CMD ["python", "-u", "scheduler.py"]

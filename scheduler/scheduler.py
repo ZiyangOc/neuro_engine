@@ -40,7 +40,19 @@ class TaskProcessor:
             try:
                 config.load_incluster_config()  # 集群内部认证
             except config.ConfigException:
-                config.load_kube_config()  # 外部kubeconfig认证
+                # 添加详细的路径检查和日志记录
+                kube_config = os.path.expanduser("~/.kube/config")
+                minikube_ca = "/root/.minikube/ca.crt"  # 容器内挂载路径
+                
+                if not os.path.exists(kube_config):
+                    raise RuntimeError(f"Kube config file not found at {kube_config}")
+                if not os.path.exists(minikube_ca):
+                    raise RuntimeError(f"Minikube CA cert not found at {minikube_ca}")
+                    
+                logging.info(f"Loading kube config from {kube_config}")
+                logging.info(f"Using Minikube CA cert at {minikube_ca}")
+                
+                config.load_kube_config(config_file=kube_config)  # 显式指定配置文件路径
 
             api = client.BatchV1Api()
     
