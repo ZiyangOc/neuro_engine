@@ -29,9 +29,39 @@ class TaskProcessor:
             except Exception as e:
                 logger.error(f"Failed processing task {task['_id']}: {str(e)}")
 
-    def submit_k8s_job(self, manifest):
-        print(manifest)
-        pass
+    def submit_k8s_job(self, job) -> str:
+        """提交Kubernetes Job并返回作业ID"""
+        from kubernetes import client, config
+        from kubernetes.client.rest import ApiException
+        import socket
+        
+        try:
+            # 自动检测环境加载配置
+            try:
+                config.load_incluster_config()  # 集群内部认证
+            except config.ConfigException:
+                config.load_kube_config()  # 外部kubeconfig认证
+
+            api = client.BatchV1Api()
+    
+            # 提交Job
+            job = api.create_namespaced_job(
+                namespace="default",
+                body=job
+            )
+            
+            logger.info(f"Submitted job {job.metadata.name}")
+            return job.metadata.name
+            
+        except ApiException as e:
+            logger.error(f"K8s API error: {e.reason} ({e.status})")
+            raise
+        except socket.error as e:
+            logger.critical(f"Network error: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            raise
 
 if __name__ == "__main__":
     processor = TaskProcessor()
