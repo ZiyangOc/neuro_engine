@@ -2,7 +2,7 @@ import requests
 import json
 import os
 
-API_ENDPOINT = os.environ.get('API_ENDPOINT', 'http://localhost:5000/api/tasks')
+API_ENDPOINT = os.environ.get('API_ENDPOINT', 'http://localhost:5001/api/tasks')
 
 SAMPLE_TASK = {
     "metadata": {

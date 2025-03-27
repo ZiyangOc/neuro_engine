@@ -1,78 +1,112 @@
 import os
 import logging
-from flask import Flask, request, jsonify
-from pymongo import MongoClient
-from kafka import KafkaProducer, KafkaConsumer
-from threading import Thread
-from datetime import datetime
-import uuid
-from kubernetes import client, config
-import time
 import json
-from prometheus_client import start_http_server, Counter, Gauge, Histogram
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+import uuid
+import time
+from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
 
-# Initialize logging
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+from kafka import KafkaProducer, KafkaConsumer
+from kubernetes import client, config
+from threading import Thread
+from prometheus_client import start_http_server, Counter, Gauge, Histogram
+from parser import TaskValidator,TaskDocumentBuilder,KubernetesJobBuilder
+
+# Enhanced Logging Configuration
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('task_manager.log', encoding='utf-8')
+    ]
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Application Configuration
+class AppConfig:
+    KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
+    MONGO_URI = os.getenv("MONGO_URI", "mongodb://appuser:appuser123@mongo:27017/taskdb?authSource=admin")
+    MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+    TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", "3600"))  # 1 hour default
+    PROMETHEUS_PORT = int(os.getenv("PROMETHEUS_PORT", "9090"))
+    NAMESPACE = os.getenv("K8S_NAMESPACE", "default")
+    DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-# Configuration
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://appuser:appuser123@mongo:27017/taskdb?authSource=admin")
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
-TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", "3600"))  # 1 hour default
-PROMETHEUS_PORT = int(os.getenv("PROMETHEUS_PORT", "9090"))
-
-# Prometheus metrics
+# Prometheus Metrics
 TASKS_CREATED = Counter('tasks_created_total', 'Total tasks created')
 TASKS_COMPLETED = Counter('tasks_completed_total', 'Total tasks completed', ['status'])
 TASK_PROCESSING_TIME = Histogram('task_processing_seconds', 'Task processing time in seconds')
 ACTIVE_TASKS = Gauge('active_tasks', 'Currently active tasks')
 TASK_QUEUE_SIZE = Gauge('task_queue_size', 'Number of tasks waiting in queue')
 
-# Rate limiting
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
+class MongoDBManager:
+    def __init__(self, uri: str):
+        try:
+            self.client = MongoClient(uri)
+            self.db = self.client.taskdb
+            self.tasks_collection = self.db.tasks
+            self.task_history_collection = self.db.task_history
+        except PyMongoError as e:
+            logger.error(f"MongoDB connection error: {e}")
+            raise
 
-# Initialize clients
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client.taskdb
-tasks_collection = db.tasks
-task_history_collection = db.task_history
+    def insert_task(self, task_doc: Dict[str, Any]) -> str:
+        try:
+            result = self.tasks_collection.insert_one(task_doc)
+            return str(result.inserted_id)
+        except PyMongoError as e:
+            logger.error(f"Failed to insert task: {e}")
+            raise
 
-# Initialize Kafka producer
-kafka_producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BROKER,
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
+    def update_task(self, task_id: str, update_data: Dict[str, Any]) -> bool:
+        try:
+            result = self.tasks_collection.update_one(
+                {"_id": task_id},
+                {"$set": update_data}
+            )
+            return result.modified_count > 0
+        except PyMongoError as e:
+            logger.error(f"Failed to update task {task_id}: {e}")
+            return False
 
-# Kafka topics
-TASK_TOPIC = "tasks"
-TASK_EVENTS_TOPIC = "task_events"
+    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            return self.tasks_collection.find_one({"_id": task_id})
+        except PyMongoError as e:
+            logger.error(f"Failed to retrieve task {task_id}: {e}")
+            return None
+
+    def archive_task(self, task_id: str) -> bool:
+        try:
+            task = self.tasks_collection.find_one({"_id": task_id})
+            if task:
+                self.task_history_collection.insert_one(task)
+                self.tasks_collection.delete_one({"_id": task_id})
+                return True
+            return False
+        except PyMongoError as e:
+            logger.error(f"Failed to archive task {task_id}: {e}")
+            return False
 
 class KubernetesJobManager:
-    def __init__(self):
-        # Initialize Kubernetes client
+    def __init__(self, namespace: str = "default"):
         try:
             config.load_incluster_config()
         except config.ConfigException:
             config.load_kube_config()
         self.batch_api = client.BatchV1Api()
-    
-    def submit_job(self, job_manifest):
-        # Submit job to Kubernetes
+        self.namespace = namespace
+
+    def submit_job(self, job_manifest: Dict[str, Any]) -> str:
         try:
             job = self.batch_api.create_namespaced_job(
-                namespace="default",
+                namespace=self.namespace,
                 body=job_manifest
             )
             return job.metadata.name
@@ -80,256 +114,210 @@ class KubernetesJobManager:
             logger.error(f"Failed to submit job: {str(e)}")
             raise
 
-# API Endpoints
-@app.route('/api/tasks', methods=['POST'])
-@limiter.limit("10/minute")
-def create_task():
-    """Create a new task"""
-    try:
-        task_data = request.json
-        
-        # Validate input
-        if not task_data.get('command'):
-            return jsonify({"error": "Command is required"}), 400
-            
-        # Generate task ID
+class TaskManager:
+    def __init__(self, config: AppConfig, mongodb_manager: MongoDBManager, job_manager: KubernetesJobManager):
+        self.config = config
+        self.mongodb_manager = mongodb_manager
+        self.job_manager = job_manager
+        self.kafka_producer = KafkaProducer(
+            bootstrap_servers=config.KAFKA_BROKER,
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
+
+    def create_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
+        # 输入验证
+        TaskValidator.validate(task_data)
+
+        # 构建标准文档
         task_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        task_doc = TaskDocumentBuilder.build(
+            task_id=task_id,
+            task_data=task_data,
+            default_timeout=self.config.TASK_TIMEOUT,
+            default_max_retries=self.config.MAX_RETRIES
+        )
+
+        # 保存到数据库（保持不变）
+        self.mongodb_manager.insert_task(task_doc)
         
-        # Create task document
-        task_doc = {
-            "_id": task_id,
-            "status": "pending",
-            "created_at": created_at,
-            "created_by": get_remote_address(),
-            "priority": task_data.get('priority', 'normal'),
-            "attempts": 0,
-            "timeout": task_data.get('timeout', TASK_TIMEOUT),
-            **task_data
-        }
-        
-        # Save to MongoDB
-        tasks_collection.insert_one(task_doc)
-        
-        # Publish to Kafka
-        kafka_producer.send(TASK_TOPIC, value={
+        # 发送Kafka消息（保持不变）
+        self.kafka_producer.send("tasks", value={
             "task_id": task_id,
-            "timestamp": str(created_at)
+            "timestamp": str(task_doc['created_at'])
         })
-        
-        # Update metrics
+
+        # 更新指标（保持不变）
         TASKS_CREATED.inc()
         TASK_QUEUE_SIZE.inc()
-        
-        logger.info(f"Created new task {task_id}")
-        
-        return jsonify({
+
+        return {
             "task_id": task_id,
             "status": "pending",
-            "created_at": created_at.isoformat()
-        }), 202
-        
-    except Exception as e:
-        logger.error(f"Task creation failed: {str(e)}")
-        return jsonify({"error": "Task creation failed", "details": str(e)}), 500
+            "created_at": str(task_doc['created_at'])
+        }
 
-@app.route('/api/tasks/<task_id>', methods=['GET'])
-def get_task_status(task_id):
-    """Get task status"""
-    try:
-        task = tasks_collection.find_one({"_id": task_id})
-        if not task:
-            return jsonify({"error": "Task not found"}), 404
-            
-        return jsonify({
-            "task_id": task_id,
-            "status": task.get("status"),
-            "created_at": task.get("created_at").isoformat(),
-            "updated_at": task.get("updated_at", task.get("created_at")).isoformat(),
-            "k8s_job": task.get("k8s_job"),
-            "error": task.get("error")
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Failed to get task status: {str(e)}")
-        return jsonify({"error": "Failed to get task status"}), 500
+    def handle_task_result(self, event: Dict[str, Any]) -> None:
+        task_id = event["task_id"]
+        status = event["status"]
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Service health check"""
-    try:
-        # Check MongoDB connection
-        mongo_client.admin.command('ping')
-        # Check Kafka connection
-        kafka_producer.list_topics()
-        return jsonify({"status": "healthy"}), 200
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+        update_data = {
+            "status": status,
+            "completed_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
 
-def task_consumer():
+        if status == "completed":
+            update_data["result"] = event.get("result")
+        else:
+            update_data["error"] = event.get("error")
+
+        self.mongodb_manager.update_task(task_id, update_data)
+        self.mongodb_manager.archive_task(task_id)
+
+        # Update metrics
+        TASKS_COMPLETED.labels(status=status).inc()
+        logger.info(f"Task {task_id} completed with status: {status}")
+
+def task_consumer(task_manager: TaskManager, mongodb_manager: MongoDBManager):
     """Consume tasks from Kafka and process them"""
     consumer = KafkaConsumer(
-        TASK_TOPIC,
-        bootstrap_servers=KAFKA_BROKER,
+        "tasks",
+        bootstrap_servers=task_manager.config.KAFKA_BROKER,
         group_id="task-processor",
         auto_offset_reset="earliest"
     )
-    
-    job_manager = KubernetesJobManager()
-    
+
+    job_manager = KubernetesJobManager(task_manager.config.NAMESPACE)
+
     for message in consumer:
         try:
             data = json.loads(message.value.decode())
             task_id = data["task_id"]
-            
+
             # Update metrics
             TASK_QUEUE_SIZE.dec()
             ACTIVE_TASKS.inc()
-            
+
             start_time = time.time()
             logger.info(f"Processing task {task_id}")
-            
+
             # Get task details
-            task = tasks_collection.find_one({"_id": task_id})
+            task = mongodb_manager.get_task(task_id)
             if not task:
                 logger.warning(f"Task {task_id} not found")
                 continue
-                
-            # Check if task is expired
-            if is_task_expired(task):
-                mark_task_as_failed(task_id, "Task timeout")
+
+            # Check task timeout
+            created_at = task["created_at"]
+            timeout = task.get("timeout", task_manager.config.TASK_TIMEOUT)
+            if (datetime.utcnow() - created_at).total_seconds() > timeout:
+                mongodb_manager.update_task(task_id, {
+                    "status": "failed",
+                    "error": "Task timeout"
+                })
                 continue
-                
-            # Build job manifest
-            job_manifest = build_job_manifest(task)
-            
+
             # Submit to Kubernetes
+            job_manifest = KubernetesJobBuilder.build_manifest(
+                task_id=task_id,
+                task_execution=task["execution"],
+                namespace=task_manager.config.NAMESPACE
+            )
+
             job_name = job_manager.submit_job(job_manifest)
-            
+
             # Update task status
             update_data = {
                 "status": "processing",
                 "k8s_job": job_name,
-                "started_at": datetime.utcnow(),
                 "updated_at": datetime.utcnow(),
                 "$inc": {"attempts": 1}
             }
-            tasks_collection.update_one({"_id": task_id}, {"$set": update_data})
-            
+            mongodb_manager.update_task(task_id, update_data)
+
             # Record processing time
             processing_time = time.time() - start_time
             TASK_PROCESSING_TIME.observe(processing_time)
-            
+
             logger.info(f"Successfully submitted task {task_id} to Kubernetes")
-            
+
         except Exception as e:
             logger.error(f"Failed to process task {task_id}: {str(e)}")
-            if task_id:
-                handle_failed_task(task_id, str(e))
         finally:
             ACTIVE_TASKS.dec()
 
-def is_task_expired(task):
-    """Check if task has expired"""
-    timeout = task.get("timeout", TASK_TIMEOUT)
-    created_at = task["created_at"]
-    return (datetime.utcnow() - created_at).total_seconds() > timeout
-
-def handle_failed_task(task_id, error):
-    """Handle failed task with retry logic"""
-    task = tasks_collection.find_one({"_id": task_id})
-    if not task:
-        return
-        
-    current_attempts = task.get("attempts", 0)
-    
-    if current_attempts < MAX_RETRIES:
-        # Retry task with exponential backoff
-        retry_delay = min(2 ** current_attempts, 60)  # Max 60 seconds
-        time.sleep(retry_delay)
-        
-        # Republish to Kafka
-        kafka_producer.send(TASK_TOPIC, value={
-            "task_id": task_id,
-            "timestamp": str(datetime.utcnow())
-        })
-        
-        logger.info(f"Retrying task {task_id}, attempt {current_attempts + 1}")
-    else:
-        # Mark as failed after max retries
-        mark_task_as_failed(task_id, error)
-
-def mark_task_as_failed(task_id, error):
-    """Mark task as failed"""
-    tasks_collection.update_one(
-        {"_id": task_id},
-        {"$set": {
-            "status": "failed",
-            "error": error,
-            "completed_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
-        }}
-    )
-    TASKS_COMPLETED.labels(status="failed").inc()
-    logger.error(f"Task {task_id} failed: {error}")
-
-def result_consumer():
+def result_consumer(task_manager: TaskManager):
     """Consume task results from Kubernetes"""
     consumer = KafkaConsumer(
-        TASK_EVENTS_TOPIC,
-        bootstrap_servers=KAFKA_BROKER,
+        "task_events",
+        bootstrap_servers=task_manager.config.KAFKA_BROKER,
         group_id="result-processor"
     )
-    
+
     for message in consumer:
         try:
             event = json.loads(message.value.decode())
-            task_id = event["task_id"]
-            status = event["status"]
-            
-            # Update task status
-            update_data = {
-                "status": status,
-                "completed_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }
-            
-            if status == "completed":
-                update_data["result"] = event.get("result")
-            else:
-                update_data["error"] = event.get("error")
-                
-            tasks_collection.update_one(
-                {"_id": task_id},
-                {"$set": update_data}
-            )
-            
-            # Archive to history
-            task = tasks_collection.find_one({"_id": task_id})
-            if task:
-                task_history_collection.insert_one(task)
-                tasks_collection.delete_one({"_id": task_id})
-            
-            # Update metrics
-            TASKS_COMPLETED.labels(status=status).inc()
-            
-            logger.info(f"Task {task_id} completed with status: {status}")
-            
+            task_manager.handle_task_result(event)
         except Exception as e:
             logger.error(f"Failed to process task result: {str(e)}")
 
-# Start Prometheus metrics server
-start_http_server(PROMETHEUS_PORT)
+def create_app(config: AppConfig, mongodb_manager: MongoDBManager, job_manager: KubernetesJobManager):
+    app = Flask(__name__)
+    CORS(app)
+    
+    task_manager = TaskManager(config, mongodb_manager, job_manager)
+
+    @app.route('/api/tasks', methods=['POST'])
+    def create_task():
+        try:
+            raw_data = request.json
+            result = task_manager.create_task(raw_data)
+            return jsonify(result), 202
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            logger.error(f"Task creation error: {e}")
+            return jsonify({"error": "Internal server error"}), 500
+
+    @app.route('/api/tasks/<task_id>', methods=['GET'])
+    def get_task_status(task_id):
+        try:
+            task = mongodb_manager.get_task(task_id)
+            if not task:
+                return jsonify({"error": "Task not found"}), 404
+            
+            return jsonify({
+                "task_id": task_id,
+                "status": task.get("status"),
+                "created_at": task.get("created_at").isoformat(),
+                "updated_at": task.get("updated_at", task.get("created_at")).isoformat(),
+                "k8s_job": task.get("k8s_job"),
+                "error": task.get("error")
+            }), 200
+        except Exception as e:
+            logger.error(f"Failed to get task status: {e}")
+            return jsonify({"error": "Internal server error"}), 500
+
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        try:
+            # Basic health checks
+            mongodb_manager.client.admin.command('ping')
+            return jsonify({"status": "healthy"}), 200
+        except Exception as e:
+            return jsonify({"status": "unhealthy", "error": str(e)}), 500
+
+    return app
 
 if __name__ == "__main__":
-    # Start Kafka consumer thread
-    consumer_thread = Thread(target=task_consumer, daemon=True)
-    consumer_thread.start()
-    
-    # Start result consumer thread
-    result_thread = Thread(target=result_consumer, daemon=True)
-    result_thread.start()
-    
-    # Start Flask application
-    app.run(host="0.0.0.0", port=5000)
+    appconfig = AppConfig()
+    mongodb_manager = MongoDBManager(appconfig.MONGO_URI)
+    job_manager = KubernetesJobManager(appconfig.NAMESPACE)
+    app = create_app(appconfig, mongodb_manager, job_manager)
+    app.run(host="0.0.0.0", port=5000, debug=appconfig.DEBUG)
+else:
+    # 提供给 Gunicorn 使用
+    appconfig = AppConfig()
+    mongodb_manager = MongoDBManager(appconfig.MONGO_URI)
+    job_manager = KubernetesJobManager(appconfig.NAMESPACE)
+    app = create_app(appconfig, mongodb_manager, job_manager)

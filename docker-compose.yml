@@ -19,20 +19,40 @@ services:
 
   kafka:
     image: bitnami/kafka:3.4
+    container_name: kafka
     ports:
       - "9092:9092"
+    volumes:
+      - ./kafka_data:/bitnami/kafka  # Kafka数据持久化目录
     environment:
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092  # 重要！需要改为容器名称
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      ALLOW_PLAINTEXT_LISTENER: "yes"  # 允许明文通信
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   zookeeper:
     image: bitnami/zookeeper:3.8
+    container_name: zookeeper
+    volumes:
+      - ./zookeeper_data:/bitnami/zookeeper  # Zookeeper数据持久化目录
     environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
+      ALLOW_ANONYMOUS_LOGIN: "yes"
     ports:
       - "2181:2181"
+    healthcheck:
+      test: ["CMD", "zkServer.sh", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
 
   # api:
   #   build:
@@ -62,3 +82,7 @@ services:
   #     mongo:
   #       condition: service_healthy
 
+volumes:
+  mongo_data:  # MongoDB的卷声明（已存在）
+  kafka_data:   # 新增Kafka卷声明
+  zookeeper_data: # 新增Zookeeper卷声明
