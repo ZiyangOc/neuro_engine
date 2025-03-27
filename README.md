@@ -4,18 +4,18 @@
 
 A distributed task processing system with API service and scheduler components.
 
-## 目录
-- [功能特性](#功能特性)
-- [技术栈](#技术栈)
-- [快速开始](#快速开始)
-- [开发指南](#开发指南)
-- [部署选项](#部署选项)
-- [监控指标](#监控指标)
-- [测试](#测试)
-- [贡献指南](#贡献指南)
-- [许可证](#许可证)
+## Table of Contents
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Quick Start](#quick-start)
+- [Development Guide](#development-guide)
+- [Deployment Options](#deployment-options)
+- [Monitoring Metrics](#monitoring-metrics)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [License](#license)
 
-## 技术栈
+## Technology Stack
 - Python 3.11
 - Flask 3.0
 - APScheduler 4.0
@@ -23,103 +23,103 @@ A distributed task processing system with API service and scheduler components.
 - Docker 24.0
 - Kubernetes 1.28
 
-## 快速开始
+## Quick Start
 
-### 环境要求
-- Linux 服务器（推荐 Ubuntu 22.04）
-- 最低配置：4GB 内存，2 CPU 核心
-- 需要互联网连接
+### System Requirements
+- Linux server (Recommended: Ubuntu 22.04)
+- Minimum: 4GB RAM, 2 CPU cores
+- Internet connection required
 
-## 开发指南
+## Development Guide
 
-1. 本地开发环境配置：
+1. Local environment setup:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
-2. API 文档访问：
+2. Access API documentation:
 ```bash
-# 启动开发服务器后访问
+# After starting development server
 http://localhost:5000/swagger
 ```
 
-3. 代码质量检查：
+3. Code quality checks:
 ```bash
 flake8 neuro_engine/
 mypy neuro_engine/
 ```
 
-## 部署选项
+## Deployment Options
 
 ### 1. Kubernetes Deployment (Minikube)
 ```bash
-# 启动minikube集群
+# Start minikube cluster
 ./deploy.sh k8s
 
-# 访问服务
+# Access services
 minikube service list
 ```
 
 ### 2. Docker Compose Deployment
 ```bash
-# 启动所有服务
+# Start all services
 ./deploy.sh docker
 
-# 查看日志
+# View logs
 docker-compose logs -f
 ```
 
-### 公共环境变量配置
+### Environment Variables Configuration
 ```bash
-# 复制示例配置文件
+# Copy example config
 cp .env.example .env
 
-# 根据需要修改以下配置：
+# Modify these configurations as needed:
 # MONGO_ROOT_USER=admin
 # MONGO_ROOT_PASSWORD=your-root-password
 # MONGO_USER=appuser
 # MONGO_PASSWORD=your-app-password
 ```
 
-## 服务验证
+## Service Verification
 ```bash
 curl http://localhost:30080/healthcheck
-# 预期返回 {"status":"healthy"}
+# Expected response: {"status":"healthy"}
 ```
 
-## 监控指标
-Prometheus metrics 端点：
+## Monitoring Metrics
+Prometheus metrics endpoint:
 ```bash
 curl http://localhost:30080/metrics
 ```
 
-## 测试指南
-运行测试套件：
+## Testing
+Run test suite:
 ```bash
 pytest tests/ -v
 ```
 
-生成覆盖率报告：
+Generate coverage report:
 ```bash
 pytest --cov=neuro_engine --cov-report=html tests/
 ```
 
-## 贡献指南
-1. Fork 项目仓库
-2. 创建特性分支 (`git checkout -b feature/your-feature`)
-3. 提交修改 (`git commit -am '添加新功能'`)
-4. 推送分支 (`git push origin feature/your-feature`)
-5. 创建 Pull Request
+## Contributing
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/your-feature`)
+3. Commit changes (`git commit -am 'Add new feature'`)
+4. Push branch (`git push origin feature/your-feature`)
+5. Create Pull Request
 
-代码规范要求：
-- 遵循 PEP8 规范
-- 所有函数必须有类型注解
-- 测试覆盖率不低于 80%
+Code standards:
+- Follow PEP8 guidelines
+- All functions must have type annotations
+- Minimum 80% test coverage
 
-## 许可证
+## License
 [Apache License 2.0](LICENSE)
 
-## 系统架构
+## System Architecture
 ![系统架构图](docs/architecture.png)
