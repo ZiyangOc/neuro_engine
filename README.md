@@ -1,28 +1,57 @@
 # Neuro Engine Project
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 A distributed task processing system with API service and scheduler components.
 
-## Features
-- REST API for task management
-- Background scheduler for task processing
-- MongoDB for data storage
-- Kubernetes-based deployment
-- Docker containerization
+## 目录
+- [功能特性](#功能特性)
+- [技术栈](#技术栈)
+- [快速开始](#快速开始)
+- [开发指南](#开发指南)
+- [部署选项](#部署选项)
+- [监控指标](#监控指标)
+- [测试](#测试)
+- [贡献指南](#贡献指南)
+- [许可证](#许可证)
 
-## Technology Stack
-- Python 3.9+
-- Flask REST API
-- APScheduler
-- MongoDB 5.0
-- Docker 20.10+
-- Kubernetes (k3s)
+## 技术栈
+- Python 3.11
+- Flask 3.0
+- APScheduler 4.0
+- MongoDB 7.0
+- Docker 24.0
+- Kubernetes 1.28
 
-## Prerequisites
-- Linux server (Ubuntu 22.04 recommended)
-- Minimum 4GB RAM, 2 CPU cores
-- Internet connection
+## 快速开始
 
-## Deployment Options
+### 环境要求
+- Linux 服务器（推荐 Ubuntu 22.04）
+- 最低配置：4GB 内存，2 CPU 核心
+- 需要互联网连接
+
+## 开发指南
+
+1. 本地开发环境配置：
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+2. API 文档访问：
+```bash
+# 启动开发服务器后访问
+http://localhost:5000/swagger
+```
+
+3. 代码质量检查：
+```bash
+flake8 neuro_engine/
+mypy neuro_engine/
+```
+
+## 部署选项
 
 ### 1. Kubernetes Deployment (Minikube)
 ```bash
@@ -54,11 +83,43 @@ cp .env.example .env
 # MONGO_PASSWORD=your-app-password
 ```
 
-## Verification
+## 服务验证
 ```bash
 curl http://localhost:30080/healthcheck
-# Should return {"status":"healthy"}
+# 预期返回 {"status":"healthy"}
 ```
 
-## Architecture
-![System Architecture](docs/architecture.png)
+## 监控指标
+Prometheus metrics 端点：
+```bash
+curl http://localhost:30080/metrics
+```
+
+## 测试指南
+运行测试套件：
+```bash
+pytest tests/ -v
+```
+
+生成覆盖率报告：
+```bash
+pytest --cov=neuro_engine --cov-report=html tests/
+```
+
+## 贡献指南
+1. Fork 项目仓库
+2. 创建特性分支 (`git checkout -b feature/your-feature`)
+3. 提交修改 (`git commit -am '添加新功能'`)
+4. 推送分支 (`git push origin feature/your-feature`)
+5. 创建 Pull Request
+
+代码规范要求：
+- 遵循 PEP8 规范
+- 所有函数必须有类型注解
+- 测试覆盖率不低于 80%
+
+## 许可证
+[Apache License 2.0](LICENSE)
+
+## 系统架构
+![系统架构图](docs/architecture.png)
